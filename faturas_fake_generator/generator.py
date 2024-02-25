@@ -48,13 +48,13 @@ def gerar_faturas(
     """
     dados_faturas = []
 
-    for cliente in clientes:
-        num_faturas = np.random.randint(n_faturas_min, n_faturas_max+1)  # Entre 20 e 60 faturas
+    num_faturas_por_cliente = np.random.randint(n_faturas_min, n_faturas_max + 1, size=len(clientes))
+    medias_faturas = np.random.uniform(valor_minimo, valor_maximo, size=len(clientes))
+    desvios_padrao = np.random.uniform(sd_min, sd_max, size=len(clientes))
 
-        media_fatura = np.random.uniform(valor_minimo, valor_maximo)  
-        desvio_padrao = np.random.uniform(sd_min, sd_max)  # Desvio padrão entre 2 e 5
-
-        valores_faturas = np.random.normal(media_fatura, desvio_padrao, num_faturas)
+    for i, cliente in enumerate(clientes):
+        
+        valores_faturas = np.random.normal(medias_faturas[i], desvios_padrao[i], num_faturas_por_cliente[i])
 
         for valor in valores_faturas:
             dados_faturas.append([cliente, valor])
@@ -293,6 +293,7 @@ def build_fake_dataframe(size: int,
                             coluna_numero_fatura: str,
                             dias_min_atraso: int, dias_max_atraso: int, 
                             dias_min_antecipado: int, dias_max_antecipado: int,
+                            coluna_dias_pagamento: str,
                             coluna_media_vl_fatura: str, 
                             coluna_sd_vl_fatura: str, 
                             coluna_zscore_faturas: str,
@@ -340,6 +341,8 @@ def build_fake_dataframe(size: int,
     :type dias_min_antecipado: int
     :param dias_max_antes_vencimento: Valor máximo de dias de antecipação.
     :type dias_max_antes_vencimento: int
+    :type coluna_dias_pagamento: str, optional
+    :param media_total_devido: Nome da coluna de saída para o total devido.
     :type coluna_media_vl_fatura: str, optional
     : param coluna_media_vl_fatura: Nome da coluna de saída para as médias calculadas.
     :type coluna_sd_vl_fatura: str, optional
@@ -370,21 +373,22 @@ def build_fake_dataframe(size: int,
     df_faturas = gerar_faturas(df_clientes[coluna_cliente].unique(), n_faturas_min, n_faturas_max, 
                                valor_minimo, valor_maximo, sd_min, sd_max)
     df = df_clientes.merge(df_faturas, on=coluna_cliente)
-    df = marcar_faturas_pagas(df)
-    df = calcular_media_vl_fatura(df, coluna_vl_fatura, coluna_media_vl_fatura)
-    df = calcular_sd_vl_fatura(df, coluna_vl_fatura, coluna_sd_vl_fatura)
-    df = calcular_zscore_faturas(df, coluna_vl_fatura, coluna_media_vl_fatura, coluna_sd_vl_fatura, coluna_zscore_faturas)
-    df = marcar_pagamento_antes_vencimento(df)
-    df = calcular_dias_pagamento(df, dias_min_atraso, dias_max_atraso, dias_min_antecipado, dias_max_antecipado)
-    df = calcular_media_vl_fatura(df, 'dias_pagamento', coluna_media_dias_pagamento)
-    df = calcular_sd_vl_fatura(df, 'dias_pagamento', coluna_sd_dias_pagamento)
-    df = calcular_zscore_faturas(df, 'dias_pagamento', coluna_media_dias_pagamento, coluna_sd_dias_pagamento, coluna_zscore_dias_pagamento)
-    df = calcular_frequencia_faturas_aberto_12_meses(df, coluna_pago_antes_vencimento, coluna_frequencia_faturas_aberto_12_meses)
-    df = calcular_total_devido(df, coluna_status_pago, coluna_pago_antes_vencimento, coluna_vl_fatura, coluna_total_devido)
-    df = calcular_media_vl_fatura(df, coluna_total_devido, coluna_media_total_devido)
-    df = calcular_sd_vl_fatura(df, coluna_total_devido, coluna_sd_total_devido)
-    df = calcular_zscore_faturas(df, coluna_total_devido, coluna_media_total_devido, coluna_sd_total_devido, coluna_zscore_total_devido)
-
+    df = (df
+          .pipe(marcar_faturas_pagas)
+          .pipe(calcular_media_vl_fatura, coluna_vl_fatura, coluna_media_vl_fatura)
+          .pipe(calcular_sd_vl_fatura, coluna_vl_fatura, coluna_sd_vl_fatura)
+          .pipe(calcular_zscore_faturas, coluna_vl_fatura, coluna_media_vl_fatura, coluna_sd_vl_fatura, coluna_zscore_faturas)
+          .pipe(marcar_pagamento_antes_vencimento)
+          .pipe(calcular_dias_pagamento, dias_min_atraso, dias_max_atraso, dias_min_antecipado, dias_max_antecipado)
+          .pipe(calcular_media_vl_fatura, coluna_dias_pagamento, coluna_media_dias_pagamento)
+          .pipe(calcular_sd_vl_fatura, coluna_dias_pagamento, coluna_sd_dias_pagamento)
+          .pipe(calcular_zscore_faturas, coluna_dias_pagamento, coluna_media_dias_pagamento, coluna_sd_dias_pagamento, coluna_zscore_dias_pagamento)
+          .pipe(calcular_frequencia_faturas_aberto_12_meses, coluna_pago_antes_vencimento, coluna_frequencia_faturas_aberto_12_meses)
+          .pipe(calcular_total_devido, coluna_status_pago, coluna_pago_antes_vencimento, coluna_vl_fatura, coluna_total_devido)
+          .pipe(calcular_media_vl_fatura, coluna_total_devido, coluna_media_total_devido)
+          .pipe(calcular_sd_vl_fatura, coluna_total_devido, coluna_sd_total_devido)
+          .pipe(calcular_zscore_faturas, coluna_total_devido, coluna_media_total_devido, coluna_sd_total_devido, coluna_zscore_total_devido)
+         )
     return df
 
 
@@ -403,6 +407,7 @@ def generate_fake_dataframe(size: int = 100) -> pd.DataFrame:
         coluna_numero_fatura='numero_fatura',
         dias_min_atraso=1, dias_max_atraso=100, 
         dias_min_antecipado=-5, dias_max_antecipado=0,
+        coluna_dias_pagamento='dias_pagamento',
         coluna_media_vl_fatura='media_vl_fatura', 
         coluna_sd_vl_fatura='sd_vl_fatura', 
         coluna_zscore_faturas='zscore_faturas',
